@@ -10,11 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-three/drei": "^10.4.2",
+    "@react-three/fiber": "^9.1.4",
+    "@react-three/postprocessing": "^3.0.4",
     "@types/three": "^0.177.0",
+    "postprocessing": "^6.37.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-tooltip": "^5.29.1",
-    "three": "^0.177.0"
+    "three": "^0.177.0",
+    "three-stdlib": "^2.36.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
