@@ -13,12 +13,12 @@ varying vec2 vUv;
 // Photon sphere
 #define PHOTON_SPHERE 0.225
 // Accretion disk inner/outer radius
-#define DISK_INNER 0.3
-#define DISK_OUTER 0.8
+#define DISK_INNER 0.23
+#define DISK_OUTER 0.5
 
 // Color palette
-vec3 diskColor = vec3(1.0, 0.6, 0.2);
-vec3 hotSpotColor = vec3(1.0, 0.9, 0.7);
+vec3 diskColor = vec3(1.0, 0.3, 0.1);
+vec3 hotSpotColor = vec3(1.0, 0.7, 0.4);
 vec3 spaceColor = vec3(0.02, 0.02, 0.08);
 
 // Smooth step function for better blending
@@ -58,7 +58,7 @@ float accretionDisk(vec2 coord, float time) {
     
     // Radial falloff
     float radialFalloff = smootherstep(DISK_INNER, DISK_INNER + 0.1, r) * 
-                         (1.0 - smootherstep(DISK_OUTER - 0.2, DISK_OUTER, r));
+        (1.0 - smootherstep(DISK_OUTER - 0.2, DISK_OUTER, r));
     
     // Turbulence
     float turbulence = sin(rotatedAngle * 12.0 + time * 2.0) * 0.3 + 0.7;
@@ -83,36 +83,41 @@ void main() {
     // Normalize coordinates to [-1, 1]
     vec2 coord = (vUv - 0.5) * 2.0;
     coord.x *= iResolution.x / iResolution.y;
-    
-    // Apply gravitational lensing
+
+    float rCoord = length(coord);
+    if (rCoord < EVENT_HORIZON) {
+        gl_FragColor = vec4(0.0);
+        return;
+    }
+
+    // Apply gravitational lensing without distortion
     vec2 lensedCoord = gravitationalLens(coord, 0.8);
-    
-    // Calculate components
-    float disk = accretionDisk(lensedCoord, iTime);
-    float horizon = eventHorizon(coord);
+
+    // Correct the orientation: flatten accretion disk vertically
+    vec2 flattenedCoord = vec2(lensedCoord.x, lensedCoord.y * 0.25); // << FLATTEN Y-AXIS
+
+    // Calculate disk contributions (simulate light wrapping over/under)
+    float diskAbove = accretionDisk(flattenedCoord, iTime);
+    float diskBelow = accretionDisk(vec2(flattenedCoord.x, -flattenedCoord.y), iTime);
+    float disk = max(diskAbove, diskBelow);
+
+    // Accretion disk color
+    float r = length(flattenedCoord);
+    float temperature = 1.0 / (r + 0.1);
+    vec3 coolSide = vec3(0.4, 0.6, 1.0);
+    vec3 warmSide = vec3(1.0, 0.4, 0.2);
+    float doppler = 0.5 + 0.5 * sin(atan(flattenedCoord.y, flattenedCoord.x));
+    vec3 dopplerColor = mix(warmSide, coolSide, doppler);
+    vec3 diskTempColor = mix(diskColor, dopplerColor, temperature * 0.7);
+
+    // Photon sphere
     float photon = photonSphere(coord);
-    
-    // Temperature-based coloring for accretion disk
-    float r = length(lensedCoord);
-    float temperature = 1.0 / (r + 0.1); // Hotter closer to center
-    vec3 diskTempColor = mix(diskColor, hotSpotColor, temperature * 0.5);
-    
-    // Combine all elements
+
+    // Combine
     vec3 color = spaceColor;
-    
-    // Add accretion disk
     color = mix(color, diskTempColor, disk * 0.8);
-    
-    // Add photon sphere glow
     color += vec3(0.4, 0.6, 1.0) * photon;
-    
-    // Apply event horizon (black hole shadow)
-    color = mix(color, vec3(0.0), horizon);
-    
-    // Add some stars in the background
-    vec2 starCoord = coord * 10.0;
-    float stars = step(0.98, sin(starCoord.x * 100.0) * sin(starCoord.y * 100.0));
-    color += vec3(1.0) * stars * 0.3;
-    
+
     gl_FragColor = vec4(color, 1.0);
 }
+
