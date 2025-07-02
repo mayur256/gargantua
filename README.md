@@ -46,6 +46,11 @@ src/
 └── main.tsx                     # Entry point
 ```
 
+## App SC
+
+![image](https://github.com/user-attachments/assets/aaeefde4-1c00-458e-99e7-acdcdb6e6256)
+
+
 ## Shader Physics
 
 The fragment shader implements:
