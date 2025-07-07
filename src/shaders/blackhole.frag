@@ -90,34 +90,32 @@ void main() {
         return;
     }
 
-    // Apply gravitational lensing without distortion
+    // Apply gravitational lensing
     vec2 lensedCoord = gravitationalLens(coord, 0.8);
 
-    // Correct the orientation: flatten accretion disk vertically
-    vec2 flattenedCoord = vec2(lensedCoord.x, lensedCoord.y * 0.25); // << FLATTEN Y-AXIS
+    // ✅ ROTATE coordinates by -90° to align accretion disk horizontally
+    vec2 rotatedCoord = vec2(lensedCoord.y, -lensedCoord.x);
 
-    // Calculate disk contributions (simulate light wrapping over/under)
-    float diskAbove = accretionDisk(flattenedCoord, iTime);
-    float diskBelow = accretionDisk(vec2(flattenedCoord.x, -flattenedCoord.y), iTime);
+    // Disk above and below (simulate light bending over and under)
+    float diskAbove = accretionDisk(rotatedCoord, iTime);
+    float diskBelow = accretionDisk(vec2(rotatedCoord.x, -rotatedCoord.y), iTime);
     float disk = max(diskAbove, diskBelow);
 
-    // Accretion disk color
-    float r = length(flattenedCoord);
+    // Accretion disk temperature coloring
+    float r = length(rotatedCoord);
     float temperature = 1.0 / (r + 0.1);
-    vec3 coolSide = vec3(0.4, 0.6, 1.0);
-    vec3 warmSide = vec3(1.0, 0.4, 0.2);
-    float doppler = 0.5 + 0.5 * sin(atan(flattenedCoord.y, flattenedCoord.x));
+    vec3 coolSide = vec3(0.4, 0.6, 1.0);  // blue
+    vec3 warmSide = vec3(1.0, 0.4, 0.2);  // red
+    float doppler = 0.5 + 0.5 * sin(atan(rotatedCoord.y, rotatedCoord.x));
     vec3 dopplerColor = mix(warmSide, coolSide, doppler);
     vec3 diskTempColor = mix(diskColor, dopplerColor, temperature * 0.7);
 
-    // Photon sphere
     float photon = photonSphere(coord);
 
-    // Combine
+    // Combine elements
     vec3 color = spaceColor;
     color = mix(color, diskTempColor, disk * 0.8);
     color += vec3(0.4, 0.6, 1.0) * photon;
 
     gl_FragColor = vec4(color, 1.0);
 }
-
