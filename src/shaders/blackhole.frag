@@ -27,18 +27,18 @@ float smootherstep(float edge0, float edge1, float x) {
     return x * x * x * (x * (x * 6.0 - 15.0) + 10.0);
 }
 
-// Gravitational lensing approximation
+// Gravitational lensing approximation (improved)
 vec2 gravitationalLens(vec2 coord, float mass) {
     float r = length(coord);
     if (r < EVENT_HORIZON) return coord;
-    
+
     float lensStrength = mass / (r * r);
     float angle = atan(coord.y, coord.x);
-    
-    // Bend light rays around the black hole
-    float bendAngle = lensStrength * 0.5;
+
+    // Improved bend using singularity-aware power falloff
+    float bendAngle = 0.1 / pow(r - EVENT_HORIZON + 0.01, 1.25);
     angle += bendAngle;
-    
+
     return vec2(cos(angle), sin(angle)) * r;
 }
 
@@ -46,23 +46,20 @@ vec2 gravitationalLens(vec2 coord, float mass) {
 float accretionDisk(vec2 coord, float time) {
     float r = length(coord);
     if (r < DISK_INNER || r > DISK_OUTER) return 0.0;
-    
+
     float angle = atan(coord.y, coord.x);
-    
-    // Keplerian rotation (faster closer to center)
     float rotationSpeed = 1.0 / sqrt(r);
     float rotatedAngle = angle + time * rotationSpeed;
-    
-    // Spiral pattern
+
     float spiral = sin(rotatedAngle * 8.0 + r * 20.0) * 0.5 + 0.5;
-    
-    // Radial falloff
-    float radialFalloff = smootherstep(DISK_INNER, DISK_INNER + 0.1, r) * 
-        (1.0 - smootherstep(DISK_OUTER - 0.2, DISK_OUTER, r));
-    
-    // Turbulence
+
+    // Update radialFalloff inside accretionDisk()
+    float outerFade = smootherstep(DISK_OUTER - 0.1, DISK_OUTER, r);
+    float innerFade = smootherstep(DISK_INNER - 0.03, DISK_INNER + 0.02, r);
+    float radialFalloff = innerFade * (1.0 - outerFade);
+
     float turbulence = sin(rotatedAngle * 12.0 + time * 2.0) * 0.3 + 0.7;
-    
+
     return spiral * radialFalloff * turbulence;
 }
 
@@ -72,11 +69,24 @@ float eventHorizon(vec2 coord) {
     return 1.0 - smootherstep(EVENT_HORIZON - 0.02, EVENT_HORIZON, r);
 }
 
-// Photon sphere glow
+// Photon sphere glow (intensified)
 float photonSphere(vec2 coord) {
     float r = length(coord);
-    float glow = exp(-abs(r - PHOTON_SPHERE) * 20.0);
-    return glow * 0.3;
+    float glow = exp(-abs(r - PHOTON_SPHERE) * 40.0);
+    return glow * 1.0;
+}
+
+// Direct front-facing accretion disk across X-axis
+float horizontalDisk(vec2 coord) {
+    // Limit to a narrow band around y = 0
+    float y = coord.y;
+    float band = exp(-pow(y * 20.0, 2.0)); // Gaussian profile, 1 at center, 0 outside
+
+    float r = length(coord);
+    float outerFade = smootherstep(DISK_OUTER - 0.1, DISK_OUTER, r);
+    float innerFade = smootherstep(DISK_INNER - 0.03, DISK_INNER + 0.02, r);
+    float radialFade = innerFade * (1.0 - outerFade);
+    return band * radialFade;
 }
 
 void main() {
@@ -93,28 +103,44 @@ void main() {
     // Apply gravitational lensing
     vec2 lensedCoord = gravitationalLens(coord, 0.8);
 
-    // ✅ ROTATE coordinates by -90° to align accretion disk horizontally
-    vec2 rotatedCoord = vec2(lensedCoord.y, -lensedCoord.x);
+    // Rotate and flatten disk
+    vec2 rotatedCoord = vec2(lensedCoord.x * 0.25, lensedCoord.y);
 
-    // Disk above and below (simulate light bending over and under)
+    // Disk above and below
     float diskAbove = accretionDisk(rotatedCoord, iTime);
     float diskBelow = accretionDisk(vec2(rotatedCoord.x, -rotatedCoord.y), iTime);
     float disk = max(diskAbove, diskBelow);
 
-    // Accretion disk temperature coloring
+    // Direct horizontal (front) band of disk
+    float midDisk = horizontalDisk(coord);
+    disk = max(disk, midDisk);
+
+    // ✅ Step 4: Far-side lensed halo
+    vec2 lensedVerticalTop = vec2(rotatedCoord.y, rotatedCoord.x);
+    vec2 lensedVerticalBottom = vec2(-rotatedCoord.y, rotatedCoord.x);
+    float haloTop = accretionDisk(lensedVerticalTop, iTime);
+    float haloBottom = accretionDisk(lensedVerticalBottom, iTime);
+    float halo = max(haloTop, haloBottom);
+
+    float totalDisk = max(disk, halo); // Combine all disk components
+
+    // Accretion disk Doppler + temperature shading
     float r = length(rotatedCoord);
     float temperature = 1.0 / (r + 0.1);
-    vec3 coolSide = vec3(0.4, 0.6, 1.0);  // blue
-    vec3 warmSide = vec3(1.0, 0.4, 0.2);  // red
-    float doppler = 0.5 + 0.5 * sin(atan(rotatedCoord.y, rotatedCoord.x));
-    vec3 dopplerColor = mix(warmSide, coolSide, doppler);
-    vec3 diskTempColor = mix(diskColor, dopplerColor, temperature * 0.7);
+    float angle = atan(rotatedCoord.y, rotatedCoord.x);
+    float dopplerShift = 0.5 + 0.5 * (coord.x / DISK_OUTER); // from -1 to 1
+    dopplerShift = clamp(dopplerShift, 0.0, 1.0);
+
+    // Color blend and brightness ramp
+    vec3 shiftedColor = mix(vec3(1.0, 0.2, 0.1), vec3(0.2, 0.6, 1.0), dopplerShift); // red to blue
+    float brightness = mix(0.5, 1.8, dopplerShift);
+    vec3 diskTempColor = shiftedColor * brightness;
 
     float photon = photonSphere(coord);
 
-    // Combine elements
+    // Combine all
     vec3 color = spaceColor;
-    color = mix(color, diskTempColor, disk * 0.8);
+    color = mix(color, diskTempColor, totalDisk * 0.8);
     color += vec3(0.4, 0.6, 1.0) * photon;
 
     gl_FragColor = vec4(color, 1.0);
