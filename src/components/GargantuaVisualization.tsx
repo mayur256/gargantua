@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Tooltip } from 'react-tooltip';
-import { Controls } from './Controls';
+// import { Controls } from './Controls';
 import vertexShader from '../shaders/blackhole.vert?raw';
 import fragmentShader from '../shaders/blackhole.frag?raw';
 
@@ -16,14 +16,15 @@ export const GargantuaVisualization = () => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<{
     scene: THREE.Scene;
-    camera: THREE.OrthographicCamera;
+    camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
     material: THREE.ShaderMaterial;
+    canvasMesh: THREE.Mesh;
     startTime: number;
   }>(null);
 
-  const [showAnnotations, setShowAnnotations] = useState(true);
-  const [animationSpeed, setAnimationSpeed] = useState(1);
+  const [showAnnotations] = useState(false);
+  const [animationSpeed] = useState(1);
 
   const annotations: Annotation[] = [
     {
@@ -55,62 +56,65 @@ export const GargantuaVisualization = () => {
   useEffect(() => {
     if (!mountRef.current) return;
 
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
     // Scene setup
     const scene = new THREE.Scene();
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    
-    const renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      alpha: true
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      width / height,
+      0.1,
+      1000
+    );
+    camera.position.z = 1;
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mountRef.current.appendChild(renderer.domElement);
 
-    // Fullscreen quad geometry
-    const geometry = new THREE.BufferGeometry();
-    const vertices = new Float32Array([
-      -1, -1, 0,
-       1, -1, 0,
-       1,  1, 0,
-      -1, -1, 0,
-       1,  1, 0,
-      -1,  1, 0
-    ]);
-    const uvs = new Float32Array([
-      0, 0,
-      1, 0,
-      1, 1,
-      0, 0,
-      1, 1,
-      0, 1
-    ]);
-    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    // Calculate canvas dimensions to fit screen
+    const degToRad = (deg: number) => (deg * Math.PI) / 180;
+    const fovRadians = degToRad(camera.fov);
+    const yFov = camera.position.z * Math.tan(fovRadians / 2) * 2;
     
-    // Shader material
+    // Create a 2D plane for our shader
+    const canvasGeometry = new THREE.PlaneGeometry(yFov * camera.aspect, yFov);
+    const spaceTexture = new THREE.TextureLoader().load("./space_8k.jpg", () =>
+      renderer.render(scene, camera)
+    );
+    
+    // Create shader material
     const material = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
       uniforms: {
-        iTime: { value: 0 },
-        iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+        uSpaceTexture: {
+          value: spaceTexture,
+        },
+        uResolution: {
+          value: new THREE.Vector2(width, height),
+        }
       }
     });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
+    
+    // Create mesh and add to scene
+    const canvasMesh = new THREE.Mesh(canvasGeometry, material);
+    scene.add(canvasMesh);
 
     const startTime = Date.now();
-    sceneRef.current = { scene, camera, renderer, material, startTime };
-
+    sceneRef.current = { scene, camera, renderer, material, canvasMesh, startTime };
+    
     // Animation loop
     const animate = () => {
       if (!sceneRef.current) return;
-      
-      const elapsed = ((Date.now() - sceneRef.current.startTime) / 1000) * animationSpeed;
-      sceneRef.current.material.uniforms.iTime.value = elapsed;
-      
+
+      // const elapsed = ((Date.now() - sceneRef.current.startTime) / 1000) * animationSpeed;
+      // sceneRef.current.material.uniforms.iTime.value = elapsed;
+
       sceneRef.current.renderer.render(sceneRef.current.scene, sceneRef.current.camera);
       requestAnimationFrame(animate);
     };
@@ -119,12 +123,28 @@ export const GargantuaVisualization = () => {
     // Handle resize
     const handleResize = () => {
       if (!sceneRef.current) return;
-      
+
       const width = window.innerWidth;
       const height = window.innerHeight;
-      
+
       sceneRef.current.renderer.setSize(width, height);
       sceneRef.current.material.uniforms.iResolution.value.set(width, height);
+      
+      // Update camera aspect ratio
+      sceneRef.current.camera.aspect = width / height;
+      sceneRef.current.camera.updateProjectionMatrix();
+      
+      // Recalculate canvas dimensions
+      const degToRad = (deg: number) => (deg * Math.PI) / 180;
+      const fovRadians = degToRad(sceneRef.current.camera.fov);
+      const yFov = sceneRef.current.camera.position.z * Math.tan(fovRadians / 2) * 2;
+      
+      // Update canvas mesh scale
+      sceneRef.current.canvasMesh.scale.set(
+        yFov * sceneRef.current.camera.aspect,
+        yFov,
+        1
+      );
     };
 
     window.addEventListener('resize', handleResize);
@@ -135,28 +155,28 @@ export const GargantuaVisualization = () => {
       if (sceneRef.current) {
         mountRef.current?.removeChild(sceneRef.current.renderer.domElement);
         sceneRef.current.renderer.dispose();
-        geometry.dispose();
-        material.dispose();
+        sceneRef.current.canvasMesh.geometry.dispose();
+        sceneRef.current.material.dispose();
       }
     };
   }, [animationSpeed]);
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      <div 
-        ref={mountRef} 
-        style={{ 
-          width: '100%', 
-          height: '100%', 
+      <div
+        ref={mountRef}
+        style={{
+          width: '100%',
+          height: '100%',
           background: '#000'
-        }} 
+        }}
       />
-      
+
       {/* Controls */}
-      <Controls 
+      {/* <Controls
         onToggleAnnotations={setShowAnnotations}
         onSpeedChange={setAnimationSpeed}
-      />
+      /> */}
 
       {/* Title */}
       <div style={{
@@ -171,7 +191,7 @@ export const GargantuaVisualization = () => {
       }}>
         Gargantua Black Hole
       </div>
-      
+
       {/* Annotation overlays */}
       {showAnnotations && annotations.map((annotation) => (
         <div
