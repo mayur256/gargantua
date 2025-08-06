@@ -24,7 +24,6 @@ export const GargantuaVisualization = () => {
   }>(null);
 
   const [showAnnotations] = useState(false);
-  const [animationSpeed] = useState(1);
 
   const annotations: Annotation[] = [
     {
@@ -59,7 +58,6 @@ export const GargantuaVisualization = () => {
     const width = window.innerWidth;
     const height = window.innerHeight;
 
-    // Scene setup
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -69,56 +67,46 @@ export const GargantuaVisualization = () => {
     );
     camera.position.z = 1;
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true
-    });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const pixelRatio = Math.min(window.devicePixelRatio, 1.5); // Clamp pixel ratio
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(width, height);
     mountRef.current.appendChild(renderer.domElement);
 
-    // Calculate canvas dimensions to fit screen
-    const degToRad = (deg: number) => (deg * Math.PI) / 180;
-    const fovRadians = degToRad(camera.fov);
-    const yFov = camera.position.z * Math.tan(fovRadians / 2) * 2;
-    
-    // Create a 2D plane for our shader
-    const canvasGeometry = new THREE.PlaneGeometry(yFov * camera.aspect, yFov);
-    const spaceTexture = new THREE.TextureLoader().load("./space_8k.jpg", () =>
-      renderer.render(scene, camera)
-    );
-    
-    // Create shader material
-    const material = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader,
-      uniforms: {
-        uSpaceTexture: {
-          value: spaceTexture,
-        },
-        uResolution: {
-          value: new THREE.Vector2(width, height),
+    // Load the texture first
+    new THREE.TextureLoader().load("./space_8k.jpg", (spaceTexture) => {
+      // Calculate geometry based on FOV
+      const degToRad = (deg: number) => (deg * Math.PI) / 180;
+      const fovRadians = degToRad(camera.fov);
+      const yFov = camera.position.z * Math.tan(fovRadians / 2) * 2;
+      const canvasGeometry = new THREE.PlaneGeometry(yFov * camera.aspect, yFov);
+
+      // Now safely create material
+      const material = new THREE.ShaderMaterial({
+        vertexShader,
+        fragmentShader,
+        uniforms: {
+          uSpaceTexture: { value: spaceTexture },
+          uResolution: {
+            value: new THREE.Vector2(width * pixelRatio, height * pixelRatio),
+          }
         }
-      }
+      });
+
+      const canvasMesh = new THREE.Mesh(canvasGeometry, material);
+      scene.add(canvasMesh);
+
+      const startTime = Date.now();
+      sceneRef.current = { scene, camera, renderer, material, canvasMesh, startTime };
+
+      // Start animation loop
+      const animate = () => {
+        if (!sceneRef.current) return;
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      };
+      animate();
     });
-    
-    // Create mesh and add to scene
-    const canvasMesh = new THREE.Mesh(canvasGeometry, material);
-    scene.add(canvasMesh);
-
-    const startTime = Date.now();
-    sceneRef.current = { scene, camera, renderer, material, canvasMesh, startTime };
-    
-    // Animation loop
-    const animate = () => {
-      if (!sceneRef.current) return;
-
-      // const elapsed = ((Date.now() - sceneRef.current.startTime) / 1000) * animationSpeed;
-      // sceneRef.current.material.uniforms.iTime.value = elapsed;
-
-      sceneRef.current.renderer.render(sceneRef.current.scene, sceneRef.current.camera);
-      requestAnimationFrame(animate);
-    };
-    animate();
 
     // Handle resize
     const handleResize = () => {
@@ -126,20 +114,21 @@ export const GargantuaVisualization = () => {
 
       const width = window.innerWidth;
       const height = window.innerHeight;
+      const pixelRatio = Math.min(window.devicePixelRatio, 1.5);
 
       sceneRef.current.renderer.setSize(width, height);
-      sceneRef.current.material.uniforms.iResolution.value.set(width, height);
-      
-      // Update camera aspect ratio
+      sceneRef.current.material.uniforms.uResolution.value.set(
+        width * pixelRatio,
+        height * pixelRatio
+      );
+
       sceneRef.current.camera.aspect = width / height;
       sceneRef.current.camera.updateProjectionMatrix();
-      
-      // Recalculate canvas dimensions
+
       const degToRad = (deg: number) => (deg * Math.PI) / 180;
       const fovRadians = degToRad(sceneRef.current.camera.fov);
       const yFov = sceneRef.current.camera.position.z * Math.tan(fovRadians / 2) * 2;
-      
-      // Update canvas mesh scale
+
       sceneRef.current.canvasMesh.scale.set(
         yFov * sceneRef.current.camera.aspect,
         yFov,
@@ -157,9 +146,11 @@ export const GargantuaVisualization = () => {
         sceneRef.current.renderer.dispose();
         sceneRef.current.canvasMesh.geometry.dispose();
         sceneRef.current.material.dispose();
+        sceneRef.current = null;
       }
     };
-  }, [animationSpeed]);
+  }, []);
+
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>

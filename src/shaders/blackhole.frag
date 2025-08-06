@@ -2,7 +2,7 @@ varying vec2 vUv;
 uniform sampler2D uSpaceTexture;
 uniform vec2 uResolution;
 
-#define MAX_ITERATIONS 200
+#define MAX_ITERATIONS 256
 #define STEP_SIZE 0.1
 
 const vec3 camPos = vec3(0.0, 0.0, -10.0);
