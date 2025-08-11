@@ -48,7 +48,8 @@ src/
 
 ## App SC
 
-![image](https://github.com/user-attachments/assets/aaeefde4-1c00-458e-99e7-acdcdb6e6256)
+<img width="1870" height="912" alt="image" src="https://github.com/user-attachments/assets/a23273fe-a46e-478e-9452-7eb359ab5782" />
+
 
 
 ## Shader Physics
