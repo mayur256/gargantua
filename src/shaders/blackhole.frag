@@ -5,7 +5,7 @@ uniform vec2 uResolution;
 #define MAX_ITERATIONS 256
 #define STEP_SIZE 0.1
 
-const vec3 camPos = vec3(0.0, 0.0, -10.0);
+const vec3 camPos = vec3(0.0, 2.0, -10.0);
 const vec3 blackholePos = vec3(0.0, 0.0, 0.0);
 
 vec4 raytrace(vec3 rayDir, vec3 rayPos) {
@@ -14,8 +14,29 @@ vec4 raytrace(vec3 rayDir, vec3 rayPos) {
     // Simple stub ray march: advance the ray for MAX_ITERATIONS
     for (int i = 0; i < MAX_ITERATIONS; i++) {
         float dist = length(rayPos - blackholePos);
+        // If the ray is inside the black hole, return black
+        if (dist < 1.0) {
+            return vec4(0, 0, 0, 1);
+        }
         rayDir += -1.5 * h2 * rayPos / pow(pow(dist, 2.0), 2.5) * STEP_SIZE;
-        rayPos += rayDir * STEP_SIZE;
+        vec3 steppedRayPos = rayPos + rayDir * STEP_SIZE;
+
+        if (dist > 2.0 && dist < 5.0 && rayPos.y * steppedRayPos.y < pow(STEP_SIZE, 3.0)) {
+            // calculate flow of the matter around the black hole
+            vec3 shiftVector = 0.6 * cross(normalize(steppedRayPos), vec3(0.0, 1.0, 0.0));
+            // calculate velocity as a dot product of the shiftVector and ray direction
+            float velocity = dot(rayDir, shiftVector);
+            // calculate doppler shift
+            float dopplerShift = sqrt((1.0 - velocity) / (1.0 + velocity));
+
+            // compute gravitation shift of the matter and light
+            float gravitationalShift = sqrt((1.0 - 2.0 / dist) / (1.0 - 2.0 / length(camPos)));
+
+            return vec4(vec3(1) * dopplerShift * gravitationalShift, 1.0);
+        }
+
+        // rayPos += rayDir * STEP_SIZE;
+        rayPos = steppedRayPos;
     }
 
     // Return the sampled space texture based on final ray direction
