@@ -95,8 +95,17 @@ vec4 raytrace(vec3 rayDir, vec3 rayPos) {
             // calculate the optical depth, which scales with the step size
             float opticalDepth = STEP_SIZE * 50.0 * diskDensity;
 
+            vec3 baseColor = mix(vec3(1.0, 0.6, 0.3), vec3(1.0, 0.3, 0.0), diskDensity);
+
+            // simple glow that decays with distance from disk and black hole
+            float glowFalloff = smoothstep(outerDiskRadius, innerDiskRadius, dist);
+            float glowIntensity = diskDensity * glowFalloff * 0.6; // tune this
+
+            vec3 finalColor = baseColor * dopplerShift * gravitationalShift * opticalDepth;
+            finalColor += baseColor * glowIntensity; // add soft glow
+
             // finally determine luminance
-            return vec4(vec3(1) * dopplerShift * gravitationalShift * opticalDepth, 1.0);
+            return vec4(finalColor, 1.0);
         }
 
         // rayPos += rayDir * STEP_SIZE;
